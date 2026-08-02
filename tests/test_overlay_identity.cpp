@@ -33,9 +33,8 @@ int wmain(){
     CHECK(Validate(L"gh:Owner/Repo#SubApp",normalized)&&normalized==L"gh:owner/repo#subapp");
     CHECK(CanonicalGithubManifestUrl(L"1kb-exe/1kb",L"")==L"https://github.com/1kb-exe/1kb/releases/latest/download/1KB.ini");
     CHECK(CanonicalGithubManifestUrl(L"owner/repo",L"subapp")==L"https://github.com/owner/repo/releases/download/subapp/1KB.ini");
-    for(std::string_view token:OverlayIdentity::Model::UrlTokens)
-        CHECK(token.find_first_of("ABCDEFGHIJKLMNOPQRSTUVWXYZ")==std::string_view::npos);
     CHECK(std::count(OverlayIdentity::Model::UrlTokens.begin(),OverlayIdentity::Model::UrlTokens.end(),std::string_view("1kb"))==1);
+    CHECK(std::count(OverlayIdentity::Model::UrlTokens.begin(),OverlayIdentity::Model::UrlTokens.end(),std::string_view("1KB"))==1);
     CHECK(Validate(L"url:https://example.com/config.ini",normalized)&&normalized==L"url:https://example.com/config.ini");
     CHECK(Validate(L"url:https://farzher.com/desktop-honey/latest#desktop-honey",normalized)&&normalized==L"url:https://farzher.com/desktop-honey/latest#desktop-honey");
     CHECK(Validate(L"url:http://localhost:12345/config.ini",normalized)&&normalized==L"url:http://localhost:12345/config.ini");
@@ -69,7 +68,7 @@ int wmain(){
     CHECK(Encode(L"url:https://x/1kb.ini",wire)&&Decode(wire,decoded)&&decoded==L"url:https://x/1kb.ini");
     size_t lowerTokenSize=wire.size();
     CHECK(Encode(L"url:https://x/1KB.ini",wire)&&Decode(wire,decoded)&&decoded==L"url:https://x/1KB.ini");
-    CHECK(wire.size()>=lowerTokenSize);
+    CHECK(wire.size()==lowerTokenSize);
     CHECK(Encode(L"url:https://farzher.com/desktop-honey/latest#desktop-honey",wire));
     CHECK(Decode(wire,decoded)&&decoded==L"url:https://farzher.com/desktop-honey/latest#desktop-honey");
     CHECK(Encode(L"url:https://example.com/update/update/update/config.ini",wire));
