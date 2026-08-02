@@ -216,6 +216,9 @@ static bool HttpGetUrl(const std::wstring& initial,std::vector<char>* memory,con
         if(request)WinHttpCloseHandle(request);if(connect)WinHttpCloseHandle(connect);break;
     }WinHttpCloseHandle(session);if(output!=INVALID_HANDLE_VALUE){if(ok)ok=FlushFileBuffers(output)!=FALSE;CloseHandle(output);if(!ok)DeleteFileW(file->c_str());}return ok;
 }
+#ifndef ONEKB_RUNTIME_ONLY
+bool DownloadLauncherUrl(const std::wstring& url,std::vector<char>& bytes,uint64_t cap,uint32_t timeoutMs,uint32_t* httpStatus){gLastHttpStatus=0;bool ok=HttpGetUrl(url,&bytes,nullptr,cap,timeoutMs);if(httpStatus)*httpStatus=gLastHttpStatus;return ok;}
+#endif
 static bool ValidateDownloadUrl(const std::wstring& url,std::wstring& path){if(url.empty()||url.size()>2048||url.find(L"..")!=std::wstring::npos||url.find(L'%')!=std::wstring::npos)return false;URL_COMPONENTS u{};u.dwStructSize=sizeof(u);u.dwHostNameLength=(DWORD)-1;u.dwUrlPathLength=(DWORD)-1;u.dwExtraInfoLength=(DWORD)-1;u.dwUserNameLength=(DWORD)-1;u.dwPasswordLength=(DWORD)-1;if(!WinHttpCrackUrl(url.c_str(),0,0,&u)||!u.dwHostNameLength||u.dwUserNameLength||u.dwPasswordLength||u.dwExtraInfoLength)return false;std::wstring host(u.lpszHostName,u.dwHostNameLength);path.assign(u.lpszUrlPath,u.dwUrlPathLength);bool secure=u.nScheme==INTERNET_SCHEME_HTTPS;if((!secure&&u.nScheme!=INTERNET_SCHEME_HTTP)||(!secure&&!IsLocalHost(host))||!SafeUrlPath(path)||path.size()>=1024)return false;size_t slash=path.find_last_of(L'/');std::wstring name=path.substr(slash+1);if(name.size()<4||name.size()>255)return false;if(!EndsWithInsensitive(name,L".exe")&&!EndsWithInsensitive(name,L".zip")&&!EndsWithInsensitive(name,L".1KB"))return false;for(wchar_t c:path)if(!((c>=L'a'&&c<=L'z')||(c>=L'A'&&c<=L'Z')||(c>=L'0'&&c<=L'9')||c==L'-'||c==L'_'||c==L'.'||c==L'/'))return false;return true;}
 static bool GithubDownloadUrl(const std::wstring& url);
 static bool GithubDownloadPath(const std::wstring& url,std::wstring& path);
