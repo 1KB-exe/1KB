@@ -1,0 +1,15 @@
+Launcher.exe
+Launcher.pdb
+1KB.exe
+/r
+1KB-template.exe
+1KB.pdb
+.launcher-build/
+.1KB-build/
+.1KB-test/
+update-server/1KB.ini
+update-server/releases/*.exe
+update-server/releases/*.tmp-*
+/ignore
+__pycache__/
+*.py[cod]
