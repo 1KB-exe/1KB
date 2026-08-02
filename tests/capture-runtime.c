@@ -1,0 +1,7 @@
+#define WIN32_LEAN_AND_MEAN
+#include <windows.h>
+static wchar_t path[32768],text[65536];
+static STARTUPINFOW startup;
+static wchar_t* Add(wchar_t* p,const wchar_t* s){while(*s)*p++=*s++;return p;}
+static wchar_t* Number(wchar_t* p,DWORD n){wchar_t b[16];unsigned i=0;do{b[i++]=(wchar_t)(L'0'+n%10);n/=10;}while(n);while(i)*p++=b[--i];return p;}
+void WINAPI Entry(void){wchar_t* p=text;DWORD n,wrote;startup.cb=sizeof(startup);GetStartupInfoW(&startup);const wchar_t* names[]={L"ONEKB_PATH",L"ONEKB_VERSION",L"ONEKB_VERSION_FILE"};for(unsigned i=0;i<3;i++){p=Add(p,names[i]);*p++=L'=';n=GetEnvironmentVariableW(names[i],p,32768);p+=n;*p++=L'\n';}p=Add(p,L"COMMAND=");p=Add(p,GetCommandLineW());*p++=L'\n';p=Add(p,L"STARTUPFLAGS=");p=Number(p,startup.dwFlags);*p++=L'\n';p=Add(p,L"STDIN=");p=Number(p,GetFileType(GetStdHandle(STD_INPUT_HANDLE)));p=Add(p,L"\nSTDOUT=");p=Number(p,GetFileType(GetStdHandle(STD_OUTPUT_HANDLE)));p=Add(p,L"\nSTDERR=");p=Number(p,GetFileType(GetStdHandle(STD_ERROR_HANDLE)));*p++=L'\n';n=GetEnvironmentVariableW(L"BOOTSTRAP_TEST_OUTPUT",path,32768);if(n&&n<32768){HANDLE h=CreateFileW(path,GENERIC_WRITE,FILE_SHARE_READ,0,CREATE_ALWAYS,FILE_ATTRIBUTE_NORMAL,0);if(h!=INVALID_HANDLE_VALUE){WriteFile(h,text,(DWORD)((BYTE*)p-(BYTE*)text),&wrote,0);CloseHandle(h);}}n=GetEnvironmentVariableW(L"BOOTSTRAP_TEST_WAIT_FILE",path,32768);if(n&&n<32768)while(GetFileAttributesW(path)!=INVALID_FILE_ATTRIBUTES)Sleep(10);ExitProcess(37);}

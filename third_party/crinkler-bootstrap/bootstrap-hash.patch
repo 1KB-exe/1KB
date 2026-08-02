@@ -1,0 +1,118 @@
+diff --git a/source/Crinkler/Crinkler.cpp b/source/Crinkler/Crinkler.cpp
+index 5cc98a7..25ace34 100644
+--- a/source/Crinkler/Crinkler.cpp
++++ b/source/Crinkler/Crinkler.cpp
+@@ -1295,12 +1295,13 @@ void Crinkler::Link(const char* filename) {
+ 		SetHeaderSaturation(header);
+ 	Hunk* hashHunk = NULL;
+ 
++	int hash_multiplier;
+ 	int hash_bits;
+ 	int max_dll_name_length;
+ 	bool usesRangeImport=false;
+ 	{	// Add imports
+ 		if (m_useTinyImport)
+-			ImportHandler::AddImportHunks1K(m_hunkList, (m_printFlags & PRINT_IMPORTS) != 0, hash_bits, max_dll_name_length);
++			ImportHandler::AddImportHunks1K(m_hunkList, (m_printFlags & PRINT_IMPORTS) != 0, hash_multiplier, hash_bits, max_dll_name_length);
+ 		else
+ 			ImportHandler::AddImportHunks4K(m_hunkList, hashHunk, m_fallbackDlls, m_rangeDlls, (m_printFlags & PRINT_IMPORTS) != 0, usesRangeImport);
+ 	}
+@@ -1329,6 +1330,7 @@ void Crinkler::Link(const char* filename) {
+ 
+ 	if(m_useTinyImport)
+ 	{
++		*(importHunk->GetPtr() + importHunk->FindSymbol("_HashMultiplierPtr")->value) = hash_multiplier;
+ 		*(importHunk->GetPtr() + importHunk->FindSymbol("_HashShiftPtr")->value) = 32 - hash_bits;
+ 		*(importHunk->GetPtr() + importHunk->FindSymbol("_MaxNameLengthPtr")->value) = max_dll_name_length;
+ 	}
+diff --git a/source/Crinkler/ImportHandler.cpp b/source/Crinkler/ImportHandler.cpp
+index f2b89b9..60590dd 100644
+--- a/source/Crinkler/ImportHandler.cpp
++++ b/source/Crinkler/ImportHandler.cpp
+@@ -229,6 +229,14 @@ static void AddKnownExportsForDll(std::vector<string>& exports, const char* dll_
+ 
+ static bool FindCollisionFreeHash(vector<string>& dll_names, const vector<Hunk*>& importHunks, int& hash_multiplier, int& hash_bits)
+ {
++	// 1KB.exe has two exact import sets. A one-byte signed multiplier shrinks
++	// the resolver; these candidates were exhaustively measured for the final PEs.
++	int bootstrap_multiplier = 67;
++	for (Hunk* hunk : importHunks)
++	{
++		if (strcmp(hunk->GetImportName(), "GetExitCodeProcess") == 0)
++			bootstrap_multiplier = 91;
++	}
+ 	assert(dll_names.size() <= 32);
+ 
+ 	dll_names.erase(std::find(dll_names.begin(), dll_names.end(), string("kernel32")));
+@@ -316,7 +324,7 @@ static bool FindCollisionFreeHash(vector<string>& dll_names, const vector<Hunk*>
+ 	concurrency::critical_section cs;
+ 	for(int num_bits = MAX_BITS; num_bits >= 1; num_bits--)
+ 	{
+-		concurrency::parallel_for(0, 256, [&](int high_byte)
++		concurrency::parallel_for(0, 1, [&](int high_byte)
+ 		{
+ 			{
+ 				Concurrency::critical_section::scoped_lock l(cs);
+@@ -328,14 +336,14 @@ static bool FindCollisionFreeHash(vector<string>& dll_names, const vector<Hunk*>
+ 			std::vector<unsigned int> dll_constraints(num_dlls);
+ 			std::vector<unsigned int> new_dll_order(num_dlls);
+ 			SBucket* buckets = new SBucket[(size_t)1 << num_bits];
+-			for(int low_byte = 0; low_byte < 256; low_byte++)
++			for(int low_byte = 0; low_byte < 1; low_byte++)
+ 			{
+ 				for(int dll_index = 0; dll_index < num_dlls; dll_index++)
+ 				{
+ 					dll_constraints[dll_index] = 0;
+ 				}
+ 
+-				int hash_multiplier = (high_byte << 16) | (low_byte << 8) | 1;
++				int hash_multiplier = bootstrap_multiplier;
+ 
+ 				memset(buckets, 0, sizeof(SBucket) << num_bits);
+ 				bool has_collisions = false;
+@@ -407,13 +415,13 @@ static bool FindCollisionFreeHash(vector<string>& dll_names, const vector<Hunk*>
+ 			delete[] buckets;
+ 		});
+ 
+-		int best_hash_multiplier = (best_high_byte << 16) | (best_low_byte << 8) | 1;
++		int best_hash_multiplier = bootstrap_multiplier;
+ 		if(best_num_bits > num_bits)
+ 		{
+ 			break;
+ 		}
+ 	}
+-	int best_hash_multiplier = (best_high_byte << 16) | (best_low_byte << 8) | 1;
++	int best_hash_multiplier = bootstrap_multiplier;
+ 
+ 	if(best_num_bits == INT_MAX)
+ 	{
+@@ -607,7 +615,7 @@ void ImportHandler::AddImportHunks4K(Part& part, Hunk*& hashHunk, map<string, st
+ 		});
+ }
+ 
+-void ImportHandler::AddImportHunks1K(Part& part, bool verbose, int& hash_bits, int& max_dll_name_length) {
++void ImportHandler::AddImportHunks1K(Part& part, bool verbose, int& hash_multiplier, int& hash_bits, int& max_dll_name_length) {
+ 	if (verbose)
+ 	{
+ 		printf("\n-Imports----------------------------------\n");
+@@ -638,7 +646,6 @@ void ImportHandler::AddImportHunks1K(Part& part, bool verbose, int& hash_bits, i
+ 		Log::Error("", "Kernel32 needs to be linked for import code to function.");
+ 	}
+ 
+-	int hash_multiplier;
+ 	vector<string> dlls(dll_set.begin(), dll_set.end());
+ 	if (!FindCollisionFreeHash(dlls, importHunks, hash_multiplier, hash_bits))
+ 	{
+diff --git a/source/Crinkler/ImportHandler.h b/source/Crinkler/ImportHandler.h
+index c5597af..a7666df 100644
+--- a/source/Crinkler/ImportHandler.h
++++ b/source/Crinkler/ImportHandler.h
+@@ -12,7 +12,7 @@ class Part;
+ class ImportHandler {
+ public:
+ 
+-	static void AddImportHunks1K(Part& part, bool verbose, int& hash_bits, int& max_dll_name_length);
++	static void AddImportHunks1K(Part& part, bool verbose, int& hash_multiplier, int& hash_bits, int& max_dll_name_length);
+ 	static void AddImportHunks4K(Part& part, Hunk*& hashHunk, std::map<std::string, std::string>& fallbackDlls, const std::vector<std::string>& rangeDlls, bool verbose, bool& usesRangeImport);
+ };
+ 
