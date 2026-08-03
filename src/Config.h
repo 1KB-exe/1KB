@@ -9,6 +9,7 @@ namespace Limits {
 constexpr DWORD UpdateConfigurationTimeoutMs = 5000;
 constexpr DWORD RuntimeUpdateCheckIntervalMs = 60 * 1000;
 constexpr DWORD DownloadTimeoutMs = 30000;
+constexpr DWORD GracefulRestartTimeoutMs = 5000;
 constexpr DWORD ForcedRestartTimeoutMs = 2000;
 constexpr unsigned long long MaxUpdateConfigurationSize = 4ull * 1024ull;
 constexpr unsigned long long MaxAppIdBytes = 4ull * 1024ull;
