@@ -23,13 +23,7 @@ MAX_TEMP_PATH_CHARS equ 32767
 ; zero initialized: current Windows accepts cb=0, saving its initialization.
 SCRATCH_BYTES equ 68
 ifdef ONEKB_CONSOLE_BOOTSTRAP
-; The smaller console encoding keeps process scratch directly after the
-; canonical path, so place a separate cache path beyond that writable scratch.
 ROOT_CHARS equ MAX_TEMP_PATH_CHARS*2+1+SCRATCH_BYTES/2
-else
-; GUI can let URLMon overwrite the failed canonical path. Its process scratch
-; stays at the fixed end of the maximum-sized buffer and is never aliased.
-ROOT_CHARS equ MAX_TEMP_PATH_CHARS+1+SCRATCH_BYTES/2
 endif
 
 ; Separate data hunks let Crinkler choose their compressed ordering.
@@ -44,7 +38,7 @@ BOOTBSS SEGMENT DWORD PUBLIC 'BSS'
 ifdef ONEKB_CONSOLE_BOOTSTRAP
 rootPath_align9_320 dw ROOT_CHARS dup(?)
 else
-rootPath_align9_447 dw ROOT_CHARS-SCRATCH_BYTES/2 dup(?)
+rootPath_align9_447 dw MAX_TEMP_PATH_CHARS+1 dup(?)
 processScratch dw SCRATCH_BYTES/2 dup(?)
 endif
 BOOTBSS ENDS
@@ -88,12 +82,17 @@ endif
     test eax,eax
     jnz launched
 
+ifdef ONEKB_CONSOLE_BOOTSTRAP
+    ; The canonical path is below scratch; the cache path is above it.
+    cmp ebp,edi
+    ja failed
+else
     ; A byte outside PROCESS_INFORMATION is a two-attempt state machine.
     sub byte ptr [edi+16],127
     jns failed
-    ; URLMon owns synchronization for its completed cache file. Keep that
-    ; unique path beyond writable process scratch, then run it so the runtime
-    ; can atomically promote itself to the canonical path.
+endif
+    ; URLMon owns synchronization for its completed cache file. The recovery
+    ; runtime atomically promotes its unique cache path to the canonical path.
 ifdef ONEKB_CONSOLE_BOOTSTRAP
     lea ebp,[edi+SCRATCH_BYTES]
 endif
