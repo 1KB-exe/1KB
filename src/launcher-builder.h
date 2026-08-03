@@ -18,6 +18,7 @@ inline std::wstring CanonicalGithubManifestUrl(const std::wstring& repository, c
 }
 
 bool NormalizeLauncherAppId(const std::wstring& input, std::wstring& appId, bool& github, std::wstring& repository, std::wstring& appKey);
+bool LauncherAppRelativeDirectory(const std::wstring& appId, std::wstring& relativeDirectory);
 bool DownloadLauncherUrl(const std::wstring& url, std::vector<char>& bytes, uint64_t cap, uint32_t timeoutMs, uint32_t* httpStatus = nullptr);
 bool ReadDeploymentLauncherOverlay(const std::wstring& path, LauncherOverlay& overlay);
 bool IsConsoleApplicationExecutable(const std::wstring& path);
