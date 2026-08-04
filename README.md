@@ -20,6 +20,7 @@ Turn your app into a self-updating 1KB.exe
 - 1KB.exe's self-updating launcher is smaller than a local shortcut .lnk to your program
 - The HTTP headers sent to request a 1KB.exe download are bigger than the file itself
 - 1KB.exe's code signature is many times larger than the program it signs
+- 1KB.exe's build script is larger than the program it builds
 - The average 32x32 exe icon alone is bigger than 1KB.exe
 - A conventional .exe exceeds 1KB even with just one byte of code and one byte of icon data, due to 512 byte alignment and padding
 - A 1.44MB floppy can store a maximum of 2,692 files. 1KB.exe fits in its 512 sector size, allowing 2,692 seperate program launchers to fit on 1 floppy
