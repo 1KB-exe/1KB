@@ -15,6 +15,7 @@ Turn your app into a self-updating 1KB.exe
 <br><br>
 
 ### Fun Facts
+- This project no longer works because Microsoft Defender false identifies it as a trojan, and Google shut down my server for distributing malware
 - This README.md is larger than 1KB.exe
 - Hello World in C is ~10KB when optimized for smallest size
 - 1KB.exe's self-updating launcher is smaller than a local shortcut .lnk to your program
