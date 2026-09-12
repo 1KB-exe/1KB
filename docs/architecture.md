@@ -4,98 +4,55 @@ Agent reference. Source and tests are authoritative.
 
 ## Components
 
-- `1KB.exe`: 64-bit deployment manager/builder containing x86 bootstrap templates.
-- Generated launcher: tiny x86 bootstrap plus an app-ID overlay (and, for immutable private-launcher deployments, an 8-byte payload secret).
-- `r`: extensionless x86 GUI runtime downloaded to `%TMP%\r`.
-- `%LOCALAPPDATA%\1kb`: manager records, generated launchers, and shared runtime metadata. Installed app state uses publisher/host directories directly under `%LOCALAPPDATA%`.
+- `1KB.exe`: deployment-manager TUI and launcher builder.
+- Generated launcher: tiny x86 bootstrap with an app-ID overlay and, for private apps, an 8-byte package secret.
+- `1KB-runtime.exe`: x86 launcher runtime, installed as `%TMP%\r`.
+- Installed launchers: stable entry points in each runtime-managed application root.
 
-Deployment management is linked only into the builder, never `r` or generated launchers. With no arguments the builder opens the dashboard. Passing or dropping a release EXE, ZIP, or folder enters the same remember-and-build flow as dashboard Add. Passing a generated launcher opens its remembered deployment, or the dashboard if it is not remembered locally. There are no public CLI commands.
+There is no publishing CLI. GitHub apps publish through `gh`; direct URL apps prepare the same files beside their generated launcher for static hosting.
 
-## Deployment manager
+## Releases
 
-Each deployment is under `%LOCALAPPDATA%\1kb`; display branding is never stored in app identity or identity-derived paths. GitHub IDs use `<owner>\<repository>` or `<owner>\<tag>`, while URL IDs retain their local app-name directory. Remembered app names are unique case-insensitively, but renaming one does not change its identity-based GitHub directory. `app.ini` is the single strict UTF-8 local record. It contains required canonical `app_id`, one EXE/ZIP/folder `release`, and `name`, plus optional prepared/observed `version`, `download`, remote-settings hash, repeated `extra_release` paths, and non-default `remove_icon`, immutable `encryption`, and `updates` settings. The generated launcher, payload, and uploadable `1KB.ini` are stored beside it. Writes use atomic replacement. GitHub CLI owns authentication.
-
-Adding, editing, building, opening, and forgetting local deployments do not require GitHub CLI. Canonical `gh:` app IDs support publishing and refresh. Canonical `url:` IDs support preparing a manual upload: the manager packages or encrypts the payload, writes it and `1KB.ini` beside the launcher, and shows their target URLs without transferring them. GitHub publishing verifies that the repository exists and is public, validates the release, shows a non-mutating preview, and requires the exact target version. Executables and folders are packaged as ZIPs; existing ZIPs are copied. Repeated `extra_release` entries add sidecar GitHub assets. Publishing creates a draft semantic-version release, uploads every asset, then publishes it as latest. Publishing retains the immediately previous payload while replacing the active `1KB.ini` only after payload upload succeeds.
-
-The bootstrap starts `%TMP%\r` and, only on failure, downloads `https://r.2v2.me` to a completed URLMon cache file and runs that file with the original command line. The recovery runtime atomically promotes itself to `%TMP%\r`; concurrent first launches never share a partial destination. App installation and all updates belong to the runtime.
-
-## Launcher contract
-
-Launcher identity is compact only at the overlay serialization boundary. Public and private layouts are:
-
-```text
-[complete PE][encoded identity body][typed trailer]
-[complete PE][encoded identity body][8-byte random secret][typed trailer]
-[complete PE][C0]  # public gh:1kb-exe/1kb only
-```
-
-The final typed byte is always EOF. Bits 7–6 select GitHub (`00`), HTTPS (`01`), HTTP (`10`), or the built-in namespace (`11`); bits 5–0 hold encoded-body lengths 1–62 for the first three kinds. For lengths 63–255 they are `0x3f`, with the exact 8-bit length immediately before the final byte (and after the private secret). There is no larger form.
-
-`0xC0` is the sole assigned built-in value: its complete overlay is exactly that one byte and reconstructs the exact canonical identity `gh:1kb-exe/1kb`. It is public-only and has no body or extended length. A private launcher for the same identity uses the ordinary GitHub body, 8-byte secret, and typed trailer. Every other `11` value (`0xC1`–`0xFF`) is invalid. Decoding also rejects zero ordinary lengths, malformed GitHub streams, noncanonical extended lengths, and truncation.
-
-Before body encoding, `gh:`, `url:https://`, or `url:http://` is removed. GitHub bodies use the frozen `github-owner-reference-huffman` codec: canonical Huffman coding plus compact repository references into the owner. URL bodies use the frozen trained Huffman/token/copy codec; `#` is a direct structural symbol, and `1kb` and `1KB` are the product-related codec tokens with equal Huffman weight. Other display casing is encoded as ordinary URL data only when a case-sensitive URL contains it.
-
-The decoder reconstructs the scheme, enforces the 4096-byte canonical limit, and invokes the same authoritative app-ID parser used everywhere else. Existing callers therefore receive only canonical identities. Encoded bytes never escape overlay serialization: all runtime and builder APIs continue to use canonical identities. Private launchers retain the secret directly after the encoded body. The bootstrap reads neither overlay.
-
-Canonical IDs:
-
-- `gh:owner/repository` (owner, repository, and optional app key are lowercase; for example `gh:1kb-exe/1kb`)
-- `url:<absolute URL>[#app]` (normalized scheme/host; lowercase optional app tag)
-
-The builder accepts any casing for GitHub owner, repository, and app-key input and immediately normalizes all three to lowercase. Thus display branding such as organization `1KB-exe` and repository `1KB` maps to `gh:1kb-exe/1kb`. It also accepts a GitHub repository URL or bare manifest URL. The ID permanently selects the app directory and mutexes. Filename, icon, packing, and manifest contents never affect identity. Changing a direct manifest URL changes `url:` identity.
-
-## Application source
-
-`gh:` reads `https://github.com/owner/repository/releases/latest/download/1KB.ini`; an app key instead selects `https://github.com/owner/repository/releases/download/app/1KB.ini`.
-
-Manifest format is strict UTF-8 `key=value` lines:
+The current remote `1KB.ini` is deliberately small:
 
 ```ini
-version=1.2.3
-download=example-app-v1.2.3.zip
+version=1.2.4
+download=app-v1.2.0.zip
+changes=app-v1.2.4-changes.zip
 updates=background
 ```
 
-`version` and `download` are required. Encryption is immutable launcher state and is not represented in the manifest: public launchers require `.exe` or `.zip`, while private launchers require `.1KB`. `updates` is `background`, `before-launch`, or `restart` and defaults to `background`. Downloads may be relative to the manifest URL, root-relative, or absolute HTTPS URLs (HTTP only for localhost). Manual upload preparation defaults to an explicit payload URL; extensionless manifest endpoints are treated as deployment directories, while named manifest files place the payload beside the file. Plaintext is at most 100 MiB; `.1KB` adds its fixed 56-byte overhead. Invalid recognized fields reject the whole manifest.
+`changes` and `updates` are optional; update behavior defaults to `background`. Relative references resolve beside the manifest and absolute HTTPS references retain their existing meaning. GitHub's latest `1KB.ini` points directly to its snapshot and optional cumulative changes asset; clients never inspect release history.
 
-A ZIP must yield an unambiguous app executable: only executable, only root executable, or only GUI executable. The update UI title is the launcher's filename without `.exe`; project `name` remains local builder metadata.
+Snapshot and update assets use a constrained standard ZIP: regular-file local records and payloads first, followed by their matching central directory and EOCD. Local headers contain canonical UTF-8 paths, methods, CRC32 values, and final sizes, with no data descriptors; ZIP64 size extras appear only when an uncompressed file exceeds 32 bits. Directories are implied. Stored, Deflate, and ZIP-LZMA payload bytes are copied from validated source ZIPs without recompression. Public assets are ordinary `.zip` files; private `.1KB` assets encrypt those same ZIP bytes. An update package contains complete replacement/addition files; deletions remain repeated `delete=path` lines in the consumed `1kb.updates.ini` entry.
 
-## Private launcher payloads
+The first publish is a snapshot. Later publishes default to Update, with one `Full snapshot` choice in the normal TUI flow. The manager stores the active snapshot's private hash inventory in `snapshot.idx` and cumulative changed-path history in `changes.idx`; `app.ini` contains only normal app and publishing configuration. Updates compare the current build with the snapshot and retain previously changed paths so later packages can restore snapshot bytes. A new snapshot regenerates the inventory and clears the changed paths. Public manifests contain no inventory, hashes, sizes, entry point, history, or authentication field.
 
-Encryption mode is selected when a deployment is created and cannot be changed. A private launcher receives one CNG-generated 8-byte secret on its initial build; rebuilds preserve that secret, and publishing only reads it from the launcher. Losing the launcher and its secure backup prevents compatible publishing. Leaking it reveals every release encrypted from that secret; recovery requires a new deployment and launcher. For each payload, PBKDF2-HMAC-SHA-256 derives a 32-byte AES key from the launcher secret using 100,000 iterations and the complete payload AAD as salt/context. The AAD includes the random nonce, canonical app ID, and release version, preventing precomputation across payloads. The canonical app ID remains the sole application identity and is not secret key material.
+Private `.1KB` packages retain authenticated AES-256-GCM encryption. The package authentication context binds the app ID and immutable package filename. Manifests do not add a second authentication protocol.
 
-An `.1KB` is `header || ciphertext || tag`. Its 40-byte header is serialized little-endian: `1KPACK1\0` (8 bytes), version `u16=1`, header size `u16=40`, plaintext ZIP length `u64`, random 12-byte nonce, and eight zero reserved bytes. A 16-byte GCM tag follows ciphertext, so total overhead is 56 bytes. AES-256-GCM AAD is the complete serialized header followed by `1KAAD1\0\0`, length-prefixed UTF-8 canonical app ID, and length-prefixed UTF-8 release version. Thus a payload cannot authenticate under another application identity or manifest version without adding container bytes. Every publication uses a fresh CNG nonce while retaining the launcher secret. Files are exposed to CNG through page-backed file mappings rather than copied into whole-file heap buffers, and lengths are bounded at 100 MiB before cryptographic work.
+## Runtime
 
-Publishing validates and stages the ordinary ZIP, encrypts it to an exclusively created `.1KB.tmp`, flushes and validates the container, atomically renames it, deletes plaintext, uploads payload and public extra assets, and uploads the public manifest last. The private launcher is never uploaded.
-
-The runtime obtains the launcher path through the argv/bootstrap handoff, parses the overlay directly, downloads and validates the `.1KB`, decrypts to a unique temporary ZIP, and completes GCM authentication before ZIP listing, extraction, staging, or activation. Header, ciphertext, secret, derived-key, and tag failures remove ciphertext, plaintext, and staging files while leaving the active version unchanged. Background updates use the same path without UI. Secrets and derived keys are never placed in arguments, environment variables, manifests, or logs.
-
-## State and processes
-
-Installed app state is outside the `%LOCALAPPDATA%\1kb` manager directory:
+Installed application state is visually simple:
 
 ```text
-%LOCALAPPDATA%\owner\repository\                 # gh:owner/repository
-%LOCALAPPDATA%\owner\app\                        # gh:owner/repository#app
-%LOCALAPPDATA%\host\app\                         # url:https://host/manifest#app
-%LOCALAPPDATA%\host\<canonical-url-hash>\        # URL without an app tag
+<app-root>\
+    launcher.exe
+    1kb.ini
+    current.txt
+    <current-version>\
+        <application files>
 ```
 
-A non-default URL port is represented as `host@port`. URL app tags use the same lowercase app-key syntax as GitHub app keys and are removed before HTTP requests. Names must be unique within their owner or host namespace. Each app directory contains version directories, `current.txt`, and optional local `1kb.ini` state. It contains reflected non-default manifest settings such as `updates` plus accepted HTTP validators; versions and payload URLs are not cached.
+Publisher projects remain under `%LOCALAPPDATA%\1kb\<identity-path>`, runtime-installed applications remain in their separate existing `%LOCALAPPDATA%\<identity-path>` roots, and the executable runtime remains `%TMP%\r`. `current.txt` contains only the runnable semantic version. `1kb.ini` holds the display name, update behavior, HTTP validators, and the snapshot's `download` reference. The runtime locates an unambiguous executable in the current version directory and exports `ONEKB_VERSION_FILE` as the path to `current.txt`.
 
-The runtime reads the overlay from resolved `argv[0]`, detects the PE subsystem, and exposes `ONEKB_PATH`, `ONEKB_VERSION`, and `ONEKB_VERSION_FILE` to the app. `ONEKB_VERSION` is the running version. The version file is a read-only ASCII `major.minor.patch` line atomically replaced only after a version is fully installed and activated; an app may poll or watch it and offer a restart when its value differs from the running version. Console launchers inherit standard handles and return the app exit code.
+After installation, the runtime creates a per-user Start Menu shortcut and HKCU uninstall registration. Both target the stable installed `launcher.exe`, which bootstraps `%TMP%\r` and therefore retains normal update handling. The exact internal argument `__1KB_UNINSTALL__` is intercepted by the runtime; it stops the installed app when possible and removes only the shortcut, registration, and managed installation root.
 
-Application manifest and runtime updates use ETag and Last-Modified conditional GETs. ETag takes precedence and Last-Modified is the fallback. Application validators are committed only when the advertised version is already active or installs successfully. A downloaded x86 GUI runtime enters private apply mode, waits for its parent, stages and validates its own image, atomically replaces `%TMP%\r`, then commits its validators. Runtime checks remain throttled independently. There is no signature, pinning, or cryptographic payload verification.
+If local and remote `download` values match, the runtime streams the cumulative changes package into a small `.update\changes` tree while the application runs. Once it exits, the runtime renames the version directory, overlays prepared replacement files, applies deletions, and atomically writes `current.txt`. Unchanged application bytes are neither downloaded nor copied.
 
-## Bootstrap packing
+If `download` changed, no installation is usable, or an earlier in-place update was interrupted, the runtime repairs forward from the one current snapshot plus the one current changes package. Full installation extracts into the target version directory, applies the overlay when present, and then activates it. There are no patch chains, historical manifests, inventories in installed state, backups, staging trees, journals, rollback records, or permanent package caches. Temporary `.update` work is removed after each attempt; obsolete version directories are removed after success.
 
-The builder serializes and validates exactly one production representation, then appends the compact overlay. The fixed `url:http://localhost:12345/1KB.ini` fixture exercises the canonical URL representation.
+WinHTTP feeds the sequential parser directly. Public bytes go straight to the Deflate/LZMA decoder and destination files. Private bytes first pass through Windows CNG's chained AES-GCM decryption; the one package tag is finalized before activation, and authentication failure deletes the disposable staging tree. No downloaded or decrypted archive is written. Publisher-side ZIP parsing rejects unsafe paths, links, collisions, malformed records, unsupported compression, and configured file/expanded-size limits before payload reuse; the runtime parser enforces the corresponding sequential checks per entry.
 
-- A genuine copied icon uses the resource-capable Crinkler zero-section core. Its directly serialized three-level resource tree overlaps PE fields, ignored directory prefixes, and ignored data-entry fields before insertion ahead of the remaining depacker/stream; a decoder-safety byte follows the stream.
-- `remove_icon=yes`, or an application with no genuine icon, uses the bootstrap-specific Crinkler core plus its required decoder-safety byte.
-- If copied icon resources cannot satisfy the compact serializer's invariants, launcher generation fails instead of retaining a larger conventional format.
-- Crinkler output is a nonstandard zero-section PE. Resource-update APIs are used only on the conventional temporary template, never on packed output.
+## Launcher identity
 
-The icon format intentionally depends on Crinkler-style loader behavior: `e_lfanew=4`, zero sections, four-byte alignments, instruction/header overlap, `TINYIMPORT`, and resource directory-header overlap. See `icon-crinkler.md` for the byte map and tested matrix.
-
-Preserve fixed base, no relocations, GUI/console semantics, loader-visible resources, and post-selection overlay writing. Optimize complete launcher size, not compressed stream size.
+Canonical IDs are `gh:owner/repository[#app]` or `url:<absolute URL>[#app]`. They select installation directories and mutexes independently of display names. The compact launcher overlay encoding and Crinkler bootstrap layout are documented by `src/overlay-identity-model.h`, its tests, and `docs/icon-crinkler.md`.

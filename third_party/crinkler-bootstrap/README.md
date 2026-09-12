@@ -8,11 +8,11 @@ enters the linked bootstrap with `EAX=0` and nonvolatile
 `EBX=ProcessParameters`. It also uses a patched signed-byte hash multiplier.
 `bootstrap-hash.patch` specializes Crinkler's collision search for the exact
 GUI and console import sets (signed multiplier -117) and patches that byte.
-The current GUI set imports `GetTempPathW`, `CreateProcessW`, and
+The current GUI set imports `GetTempPathW`, `CreateProcessW`, `ExitProcess`, and
 `URLDownloadToCacheFileW`; console additionally imports `WaitForSingleObject`
-and `GetExitCodeProcess`. A repeated exhaustive physical-output search after
-that import change retained -117, so the resolver module and checked-in binary
-did not need to change. The generated PE format is otherwise the
+and `GetExitCodeProcess`. The existing -117 multiplier also resolves the added
+`ExitProcess` import; direct execution tests pass without changing the resolver
+module or checked-in binary. The generated PE format is otherwise the
 upstream zero-section tiny-header format. These are private bootstrap
 contracts, not upstream Crinkler contracts.
 

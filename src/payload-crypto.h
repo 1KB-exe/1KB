@@ -18,17 +18,21 @@ struct PayloadCryptoError {
     std::wstring message;
 };
 
-struct EncryptedPayloadInfo {
-    unsigned long long plaintextBytes = 0;
-    uint8_t nonce[PayloadNonceBytes]{};
-};
+using PayloadBytes = bool (*)(void* context, const uint8_t* bytes, unsigned count);
+using PayloadProducer = bool (*)(void* context, PayloadBytes write, void* writeContext);
 
 bool GeneratePayloadSecret(uint8_t secret[PayloadSecretBytes], PayloadCryptoError* error = nullptr);
-bool EncryptPayloadZip(const std::wstring& inputZip, const std::wstring& outputLlp,
-                       const uint8_t secret[PayloadSecretBytes], const std::wstring& canonicalAppId,
-                       const std::wstring& releaseVersion, PayloadCryptoError* error = nullptr);
-bool DecryptPayloadZip(const std::wstring& inputLlp, const std::wstring& outputZip,
-                       const uint8_t secret[PayloadSecretBytes], const std::wstring& canonicalAppId,
-                       const std::wstring& releaseVersion, PayloadCryptoError* error = nullptr);
-bool ValidateEncryptedPayloadHeader(const std::wstring& inputLlp, EncryptedPayloadInfo* info,
-                                    PayloadCryptoError* error = nullptr);
+bool EncryptPayloadStream(const std::wstring& output, unsigned long long plaintextBytes,
+                          const uint8_t secret[PayloadSecretBytes], const std::wstring& canonicalAppId,
+                          const std::wstring& packageName, PayloadProducer produce, void* context,
+                          PayloadCryptoError* error = nullptr);
+
+struct PayloadDecryptStream {
+    void* state = nullptr;
+};
+bool BeginPayloadDecrypt(PayloadDecryptStream& stream, const uint8_t secret[PayloadSecretBytes],
+                         const std::wstring& canonicalAppId, const std::wstring& packageName,
+                         PayloadBytes output, void* outputContext, PayloadCryptoError* error = nullptr);
+bool DecryptPayloadBytes(PayloadDecryptStream& stream, const uint8_t* bytes, unsigned count);
+bool FinishPayloadDecrypt(PayloadDecryptStream& stream);
+void EndPayloadDecrypt(PayloadDecryptStream& stream);

@@ -1,3 +1,5 @@
+; Frozen incoming size-pass baseline: 403/420 bytes, 457/474 icon-capable.
+; Used only by tools/sweep-bootstrap.py, never by production builds.
 ; Tiny 32-bit bootstrap for WOW64. No CRT and no launcher-overlay parsing.
 ; The customized Crinkler resolver enters with EAX=0 and
 ; EBX=PEB.ProcessParameters. The conventional linked image is only a resource
@@ -112,10 +114,6 @@ endif
     call dword ptr [_imp__URLDownloadToCacheFileW@24]
     jmp tryStart
 
-ifndef ONEKB_CONSOLE_BOOTSTRAP
-failed:
-    inc ebp                        ; GUI failure status; success retains zero
-endif
 launched:
 ifdef ONEKB_CONSOLE_BOOTSTRAP
     push INFINITE
@@ -125,17 +123,16 @@ ifdef ONEKB_CONSOLE_BOOTSTRAP
     push dword ptr [edi]
     call dword ptr [_imp__GetExitCodeProcess@8]
     mov eax,dword ptr [edi]
+else
+    xchg eax,ebp                   ; GUI returns zero
+endif
     jmp exitProcess
+
 failed:
     inc eax                        ; both failed CreateProcess calls return zero
-endif
 exitProcess:
     ; RET only exits this thread; URLMon/WinINet threads can keep us alive.
-ifdef ONEKB_CONSOLE_BOOTSTRAP
     push eax
-else
-    push ebp
-endif
     call dword ptr [_imp__ExitProcess@4]
 BootstrapEntry ENDP
 

@@ -217,19 +217,27 @@ for arg in sys.argv[1:]:
     print(f"{path}: {len(data)} bytes (physical EOF {len(data)})")
     crinkler = count == 0 and pe == 4 and optional_bytes in (8, 120)
     icon_crinkler = crinkler and optional_bytes == 120
+    dll_flags = struct.unpack_from('<H', data, optional + 70)[0]
+    print(f"  ASLR flag: {bool(dll_flags & 0x40)}; DEP flag: {bool(dll_flags & 0x100)}")
     if crinkler:
+        print('  overlapping DOS/PE headers; zero sections; custom hashed imports and self-decompression')
+        print('  section protection flags unavailable (inspect live mappings for RWX)')
         kind = "resource-capable Crinkler zero-section image" if icon_crinkler else "Crinkler zero-section image"
         print(f"  {kind}: {len(data) - config}")
         print(f"  nominal SizeOfHeaders: {headers}")
     else:
         print(f"  PE headers: {headers}")
         print(f"  optional-header allocations: code={code}, initialized={initialized}, uninitialized={uninitialized}")
-    for name, raw, file_at, virtual, _ in sections:
-        print(f"  section {name or '(unnamed)'}: raw={raw}, file_offset={file_at}, virtual={virtual}")
+    for i, (name, raw, file_at, virtual, _) in enumerate(sections):
+        flags = struct.unpack_from('<I', data, section_at + i * 40 + 36)[0]
+        access = ''.join(letter for bit, letter in ((0x40000000, 'R'), (0x80000000, 'W'), (0x20000000, 'X')) if flags & bit)
+        print(f"  section {name or '(unnamed)'}: raw={raw}, file_offset={file_at}, virtual={virtual}, access={access}")
 
     directory_count = struct.unpack_from("<I", data, optional + 92)[0] if optional_bytes >= 96 else 0
     import_rva = struct.unpack_from("<I", data, optional + 104)[0] if directory_count > 1 else 0
     resource_rva, resource_size = struct.unpack_from("<II", data, optional + 112) if directory_count > 2 else (0, 0)
+    certificate_at, certificate_size = struct.unpack_from('<II', data, optional + 128) if directory_count > 4 else (0, 0)
+    print(f'  certificate table: file_offset={certificate_at}, bytes={certificate_size} (presence is not signature verification)')
     imported = imports_of(data, sections, import_rva)
     if imported:
         print("  named imports: " + "; ".join(f"{dll}: {', '.join(names)}" for dll, names in imported))

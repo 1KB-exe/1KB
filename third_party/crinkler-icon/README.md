@@ -13,10 +13,10 @@ Two included module sources differ from upstream:
   signed-byte hash multiplier.
 - `bootstrap-hash.patch` specializes Crinkler's collision search for the exact
   GUI and console import sets and patches signed multiplier -117. The GUI set
-  imports `GetTempPathW`, `CreateProcessW`, and `URLDownloadToCacheFileW`;
-  console additionally imports `WaitForSingleObject` and
-  `GetExitCodeProcess`. A repeated exhaustive physical-output search after
-  this import change retained -117, so the checked-in binary did not change.
+  imports `GetTempPathW`, `CreateProcessW`, `ExitProcess`, and `URLDownloadToCacheFileW`;
+  console additionally imports `WaitForSingleObject` and `GetExitCodeProcess`.
+  The existing -117 multiplier also resolves the added `ExitProcess` import;
+  direct execution tests pass without changing the checked-in binary.
 
 The header retains Crinkler's zero-section tiny-header decompressor. 1KB.exe
 inserts its icon carrier at offset 148; this is not an upstream

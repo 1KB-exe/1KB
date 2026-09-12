@@ -3,7 +3,7 @@ setlocal
 pushd "%~dp0"
 
 rem Fast developer build for testing the manager TUI. This intentionally skips
-rem the runtime, x86 bootstraps, embedded launcher templates, Crinkler, and UPX.
+rem the runtime, x86 bootstraps, embedded launcher templates, and Crinkler.
 where cl.exe >nul 2>nul
 if errorlevel 1 (
   set "VSWHERE=%ProgramFiles(x86)%\Microsoft Visual Studio\Installer\vswhere.exe"
@@ -29,11 +29,11 @@ set "C=/nologo /c /MP /W4 /wd4127 /wd4242 /wd4244 /wd4267 /wd4702 /Od /GS /MD"
 
 echo Compiling fast TUI test build...
 pushd "%BUILD%"
-cl.exe %C% ..\..\third_party\zlib\adler32.c ..\..\third_party\zlib\compress.c ..\..\third_party\zlib\crc32.c ..\..\third_party\zlib\deflate.c ..\..\third_party\zlib\trees.c ..\..\third_party\zlib\zutil.c || (popd & goto :failed)
+cl.exe %C% ..\..\third_party\zlib\adler32.c ..\..\third_party\zlib\compress.c ..\..\third_party\zlib\crc32.c ..\..\third_party\zlib\deflate.c ..\..\third_party\zlib\trees.c ..\..\third_party\zlib\zutil.c ..\..\third_party\zlib\inflate.c ..\..\third_party\zlib\inftrees.c ..\..\third_party\zlib\inffast.c ..\..\third_party\lzma\LzmaDec.c || (popd & goto :failed)
 cl.exe %CPP% ..\..\src\icon-png-optimizer.cpp ..\..\src\overlay-identity.cpp ..\..\src\icon-crinkler-packer.cpp ..\..\src\deployment-manager.cpp ..\..\src\payload-crypto.cpp ..\..\src\main.cpp || (popd & goto :failed)
 popd
 
-cl.exe /nologo "%BUILD%\main.obj" "%BUILD%\deployment-manager.obj" "%BUILD%\overlay-identity.obj" "%BUILD%\payload-crypto.obj" "%BUILD%\icon-png-optimizer.obj" "%BUILD%\icon-crinkler-packer.obj" "%BUILD%\adler32.obj" "%BUILD%\compress.obj" "%BUILD%\crc32.obj" "%BUILD%\deflate.obj" "%BUILD%\trees.obj" "%BUILD%\zutil.obj" /Fe"%CD%\ignore\1KB-tui.exe" /link winhttp.lib shell32.lib ole32.lib user32.lib bcrypt.lib /SUBSYSTEM:CONSOLE /INCREMENTAL:NO || goto :failed
+cl.exe /nologo "%BUILD%\main.obj" "%BUILD%\deployment-manager.obj" "%BUILD%\overlay-identity.obj" "%BUILD%\payload-crypto.obj" "%BUILD%\icon-png-optimizer.obj" "%BUILD%\icon-crinkler-packer.obj" "%BUILD%\adler32.obj" "%BUILD%\compress.obj" "%BUILD%\crc32.obj" "%BUILD%\deflate.obj" "%BUILD%\trees.obj" "%BUILD%\zutil.obj" "%BUILD%\inflate.obj" "%BUILD%\inftrees.obj" "%BUILD%\inffast.obj" "%BUILD%\LzmaDec.obj" /Fe"%CD%\ignore\1KB-tui.exe" /link winhttp.lib shell32.lib ole32.lib user32.lib bcrypt.lib /SUBSYSTEM:CONSOLE /INCREMENTAL:NO || goto :failed
 
 echo Built TUI test executable: %CD%\ignore\1KB-tui.exe
 echo Starting TUI test executable...
