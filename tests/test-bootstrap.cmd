@@ -20,9 +20,11 @@ cl.exe /c src\overlay-identity.cpp /nologo /std:c++17 /permissive- /O1 /Os /EHsc
 cl.exe tests\test_overlay_identity.cpp "%T%\overlay-identity.obj" /nologo /std:c++17 /permissive- /O1 /Os /EHsc /DUNICODE /D_UNICODE /Fo"%T%\overlay-identity-test.obj" /Fe"%T%\overlay-identity-test.exe" || goto :fail
 "%T%\overlay-identity-test.exe" || goto :fail
 cl.exe /c src\payload-crypto.cpp /nologo /std:c++17 /permissive- /O1 /Os /EHsc /DUNICODE /D_UNICODE /Fo"%T%\payload-crypto.obj" || goto :fail
-cl.exe tests\test_payload_crypto.cpp "%T%\payload-crypto.obj" /nologo /std:c++17 /permissive- /O1 /Os /EHsc /DUNICODE /D_UNICODE /Fo"%T%\payload-test.obj" /Fe"%T%\payload-crypto-test.exe" /link bcrypt.lib || goto :fail
+for %%F in (adler32 crc32 deflate trees zutil inflate inftrees inffast) do cl.exe /c third_party\zlib\%%F.c /nologo /O1 /Fo"%T%\zlib-%%F.obj" || goto :fail
+cl.exe /c third_party\lzma\LzmaDec.c /nologo /O1 /Fo"%T%\lzma.obj" || goto :fail
+cl.exe tests\test_payload_crypto.cpp "%T%\payload-crypto.obj" "%T%\zlib-*.obj" "%T%\lzma.obj" /nologo /std:c++17 /permissive- /O1 /Os /EHsc /DUNICODE /D_UNICODE /Fo"%T%\payload-test.obj" /Fe"%T%\payload-crypto-test.exe" /link bcrypt.lib || goto :fail
 "%T%\payload-crypto-test.exe" || goto :fail
-cl.exe src\main.cpp "%T%\overlay-identity.obj" "%T%\payload-crypto.obj" /nologo /std:c++17 /permissive- /O1 /Os /EHsc /DUNICODE /D_UNICODE /DONEKB_RUNTIME_ONLY /DONEKB_RUNTIME_TESTS /Fo"%T%\runtime-test.obj" /Fe"%T%\runtime-test.exe" /link winhttp.lib shell32.lib ole32.lib user32.lib gdi32.lib bcrypt.lib /SUBSYSTEM:WINDOWS || goto :fail
+cl.exe src\main.cpp "%T%\zlib-*.obj" "%T%\lzma.obj" "%T%\overlay-identity.obj" "%T%\payload-crypto.obj" /nologo /std:c++17 /permissive- /O1 /Os /EHsc /DUNICODE /D_UNICODE /DONEKB_RUNTIME_ONLY /DONEKB_RUNTIME_TESTS /Fo"%T%\runtime-test.obj" /Fe"%T%\runtime-test.exe" /link winhttp.lib shell32.lib ole32.lib user32.lib gdi32.lib bcrypt.lib /SUBSYSTEM:WINDOWS || goto :fail
 py -3 tests\test_bootstrap.py --builder "%CD%\1KB.exe" --capture-runtime "%T%\capture-runtime.exe" --gui-runtime "%T%\capture-gui.exe" --no-icon-runtime "%T%\capture-no-icon.exe" --test-runtime "%T%\runtime-test.exe" || goto :fail
 echo All launcher and runtime tests passed.
 set "TEST_EXIT=0"

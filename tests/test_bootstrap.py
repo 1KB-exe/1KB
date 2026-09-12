@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
 """End-to-end launcher and runtime execution tests."""
 import argparse
+import io
+import zipfile
 import http.server
 import os
 import shutil
@@ -8,6 +10,7 @@ import subprocess
 import tempfile
 import threading
 import time
+import winreg
 from pathlib import Path
 
 
@@ -24,18 +27,22 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self.end_headers()
             return
         if self.path == "/manifest.ini":
+            output = io.BytesIO()
+            with zipfile.ZipFile(output, 'w', compression=zipfile.ZIP_DEFLATED) as archive:
+                archive.writestr('application.exe', server.application)
+            server.package = output.getvalue()
             body = (
                 f"version={server.version}\n"
-                f"download=http://localhost:{server.server_port}/application.exe\n"
+                f"download=http://localhost:{server.server_port}/application-{server.version}.zip\n"
                 f"updates={server.updates}\n"
             ).encode()
-        elif self.path == "/application.exe":
+        elif self.path.startswith("/application-") and self.path.endswith(".zip"):
             server.application_requests += 1
             if server.fail_application:
                 self.send_response(503)
                 self.end_headers()
                 return
-            body = server.application
+            body = server.package
         else:
             self.send_response(404)
             self.end_headers()
@@ -47,6 +54,33 @@ class Handler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, *_):
         pass
+
+
+def cleanup_test_integrations():
+    uninstall = r"Software\Microsoft\Windows\CurrentVersion\Uninstall"
+    marker = "\\Temp\\1KB.exe runtime "
+    with winreg.OpenKey(winreg.HKEY_CURRENT_USER, uninstall, 0, winreg.KEY_READ | winreg.KEY_WRITE) as parent:
+        doomed = []
+        index = 0
+        while True:
+            try:
+                name = winreg.EnumKey(parent, index)
+            except OSError:
+                break
+            index += 1
+            try:
+                with winreg.OpenKey(parent, name) as key:
+                    location = winreg.QueryValueEx(key, "InstallLocation")[0]
+                    display = winreg.QueryValueEx(key, "DisplayName")[0]
+                if marker.lower() in location.lower() and display in ("capture-runtime", "capture-gui"):
+                    doomed.append(name)
+            except OSError:
+                pass
+        for name in doomed:
+            winreg.DeleteKey(parent, name)
+    programs = Path(os.environ["APPDATA"]) / "Microsoft" / "Windows" / "Start Menu" / "Programs"
+    for name in ("capture-runtime.lnk", "capture-gui.lnk"):
+        (programs / name).unlink(missing_ok=True)
 
 
 def wait_for(predicate, timeout=20):
@@ -67,8 +101,8 @@ def build_launcher(builder, application, local, app_id):
         capture_output=True, text=True, errors="replace", timeout=60,
     )
     assert result.returncode == 0, (result.stdout, result.stderr)
-    records = list((local / "1kb").glob("*/app.ini"))
-    assert len(records) == 1
+    records = list((local / "1kb").rglob("app.ini"))
+    assert len(records) == 1, (result.stdout, result.stderr, records)
     launcher = records[0].parent / f"{application.stem}.exe"
     assert launcher.exists() and launcher.stat().st_size <= 1024
     assert "console_mode=" not in records[0].read_text()
@@ -108,7 +142,7 @@ def detach_console_launcher(builder, application, local):
         text=True, errors="replace", timeout=60,
     )
     assert result.returncode == 0, (result.stdout, result.stderr)
-    records = list((local / "1kb").glob("*/app.ini"))
+    records = list((local / "1kb").rglob("app.ini"))
     assert len(records) == 1
     assert "console_mode=detached\n" in records[0].read_text()
     return records[0].parent / f"{application.stem}.exe", env
@@ -124,7 +158,7 @@ def change_release_to_gui(builder, old_application, gui_application, local):
         capture_output=True, text=True, errors="replace", timeout=60,
     )
     assert result.returncode == 0, (result.stdout, result.stderr)
-    records = list((local / "1kb").glob("*/app.ini"))
+    records = list((local / "1kb").rglob("app.ini"))
     assert len(records) == 1
     text = records[0].read_text()
     assert f"release={gui_application.resolve()}\n" in text
@@ -145,6 +179,7 @@ def main():
     parser.add_argument("--no-icon-runtime", required=True)
     parser.add_argument("--test-runtime", required=True)
     args = parser.parse_args()
+    cleanup_test_integrations()
     builder = Path(args.builder).resolve()
     capture = Path(args.capture_runtime).resolve()
     gui = Path(args.gui_runtime).resolve()
@@ -156,7 +191,7 @@ def main():
     server.application_requests = 0
     server.fail_application = False
     server.version = "1.2.3"
-    server.updates = "before-launch"
+    server.updates = "background"
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     try:
@@ -199,18 +234,44 @@ def main():
             assert f"ONEKB_PATH={launcher.resolve()}\n" in text
             assert "ONEKB_VERSION=1.2.3\n" in text and "first install" in text
             assert "STARTUPFLAGS=384\n" in text
-            currents = [path for path in local.rglob("current.txt") if "1kb" not in path.parts]
-            assert len(currents) == 1 and currents[0].read_text().strip() == "1.2.3"
+            currents = list(local.rglob("current.txt"))
+            assert len(currents) == 1 and currents[0].read_text() == "1.2.3\n"
             current = currents[0]
 
             # A background update must atomically advance the installed version.
             server.version = "2.0.0"
-            server.updates = "background"
+            server.updates = "restart"
             server.application = capture.read_bytes() + b"VERSION-2"
+            # Keep this update worker from spending its mutex hold on the
+            # unrelated runtime self-update check during a long test run.
+            (local / "1kb" / "last-runtime-update-check.txt").touch()
             output.unlink()
             second = subprocess.run([str(launcher), "background update"], env=env, timeout=40)
             assert second.returncode == 37 and wait_for(output.exists)
-            assert wait_for(lambda: current.read_text().strip() == "2.0.0")
+            assert wait_for(lambda: current.exists() and current.read_text() == "2.0.0\n")
+            # current.txt is committed just before the detached worker releases
+            # its update mutex; do not turn that intentional overlap into a race.
+            time.sleep(0.5)
+
+            # Restart mode downloads while the app is running, stops it only for
+            # mutation, and starts the new current version with the original argv.
+            server.version = "2.1.0"
+            server.updates = "restart"
+            server.application = capture.read_bytes() + b"VERSION-2.1"
+            wait_file = root / "keep-running"
+            wait_file.write_text("1")
+            env["BOOTSTRAP_TEST_WAIT_FILE"] = str(wait_file)
+            output.unlink()
+            restarting = subprocess.Popen([str(launcher), "restart update"], env=env)
+            try:
+                updated = wait_for(lambda: output.exists() and "ONEKB_VERSION=2.1.0\n" in output.read_text(encoding="utf-16-le"), 30)
+            finally:
+                wait_file.unlink(missing_ok=True)
+            exit_code = restarting.wait(timeout=40)
+            assert updated, (current.read_text(), exit_code)
+            assert exit_code == 37
+            assert current.read_text() == "2.1.0\n"
+            env.pop("BOOTSTRAP_TEST_WAIT_FILE")
 
             # A failed payload download must leave the working version active.
             server.version = "3.0.0"
@@ -220,7 +281,7 @@ def main():
             failed = subprocess.run([str(launcher), "failed update"], env=env, timeout=40)
             assert failed.returncode == 37 and wait_for(output.exists)
             assert wait_for(lambda: server.application_requests > before)
-            assert current.read_text().strip() == "2.0.0"
+            assert current.read_text() == "2.1.0\n"
             server.fail_application = False
 
             # Detached console mode persists its non-default value and uses
@@ -277,6 +338,7 @@ def main():
 
         print("PASS attached/detached console, iconless, and GUI launcher/runtime execution and updates")
     finally:
+        cleanup_test_integrations()
         server.shutdown()
         server.server_close()
         thread.join(timeout=5)

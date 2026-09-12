@@ -40,10 +40,17 @@ set "LINKCOMMON=winhttp.lib shell32.lib ole32.lib user32.lib bcrypt.lib /LTCG /O
 
 call "%VCVARS32%" >nul
 
+echo Compiling downloadable x86 launcher runtime resources...
+rc.exe /nologo /I src /fo "%TEMPBUILD%\runtime.res" src\runtime.rc || goto :failed
+
 echo Compiling downloadable x86 launcher runtime...
+for %%F in (adler32 crc32 deflate trees zutil inflate inftrees inffast) do cl.exe /c third_party\zlib\%%F.c %COMMON% /wd4127 /wd4242 /wd4244 /wd4267 /wd4702 /Fo"%TEMPBUILD%\runtime-zlib-%%F.obj" || goto :failed
+cl.exe /c third_party\lzma\LzmaDec.c %COMMON% /wd4127 /wd4242 /wd4244 /Fo"%TEMPBUILD%\runtime-lzma.obj" || goto :failed
+rem Keep normal PE layout and security protections. /Brepro removes wall-clock
+rem linker timestamps; reproducibility requires identical toolchain and inputs.
 cl.exe /c src\overlay-identity.cpp %COMMON% /DONEKB_RUNTIME_ONLY /Fo"%TEMPBUILD%\overlay-identity-runtime.obj" || goto :failed
 cl.exe /c src\payload-crypto.cpp %COMMON% /DONEKB_RUNTIME_ONLY /Fo"%TEMPBUILD%\payload-crypto-runtime.obj" || goto :failed
-cl.exe src\main.cpp "%TEMPBUILD%\overlay-identity-runtime.obj" "%TEMPBUILD%\payload-crypto-runtime.obj" %COMMON% /DONEKB_RUNTIME_ONLY /Fo"%TEMPBUILD%\runtime.obj" /Fd"%TEMPBUILD%\runtime.pdb" /Fe"%TEMPBUILD%\runtime.exe" /link %LINKCOMMON% /SUBSYSTEM:WINDOWS || goto :failed
+cl.exe src\main.cpp "%TEMPBUILD%\runtime-zlib-*.obj" "%TEMPBUILD%\runtime-lzma.obj" "%TEMPBUILD%\overlay-identity-runtime.obj" "%TEMPBUILD%\payload-crypto-runtime.obj" "%TEMPBUILD%\runtime.res" %COMMON% /DONEKB_RUNTIME_ONLY /Fo"%TEMPBUILD%\runtime.obj" /Fd"%TEMPBUILD%\runtime.pdb" /Fe"%TEMPBUILD%\1KB-runtime.exe" /link %LINKCOMMON% /Brepro /SUBSYSTEM:WINDOWS /MANIFEST:EMBED /MANIFESTINPUT:src\runtime.manifest || goto :failed
 
 echo Assembling tiny x86 GUI bootstrap template...
 ml.exe /nologo /c /coff /I"%TEMPBUILD%" /Fo"%TEMPBUILD%\bootstrap-gui.obj" src\bootstrap-x86.asm || goto :failed
@@ -87,24 +94,23 @@ if errorlevel 1 (popd & goto :failed)
 popd
 
 echo Compiling 1KB.exe builder...
-for %%F in (adler32 compress crc32 deflate trees zutil) do cl.exe /c third_party\zlib\%%F.c %COMMON% /wd4127 /wd4242 /wd4244 /wd4267 /wd4702 /Fo"%TEMPBUILD%\zlib-%%F.obj" || goto :failed
+for %%F in (adler32 compress crc32 deflate trees zutil inflate inftrees inffast) do cl.exe /c third_party\zlib\%%F.c %COMMON% /wd4127 /wd4242 /wd4244 /wd4267 /wd4702 /Fo"%TEMPBUILD%\zlib-%%F.obj" || goto :failed
+cl.exe /c third_party\lzma\LzmaDec.c %COMMON% /wd4127 /wd4242 /wd4244 /Fo"%TEMPBUILD%\lzma.obj" || goto :failed
 cl.exe /c src\icon-png-optimizer.cpp %COMMON% /DONEKB_BUILDER_ONLY /Fo"%TEMPBUILD%\icon-png-optimizer.obj" || goto :failed
 cl.exe /c src\overlay-identity.cpp %COMMON% /DONEKB_BUILDER_ONLY /Fo"%TEMPBUILD%\overlay-identity-builder.obj" || goto :failed
 cl.exe /c src\icon-crinkler-packer.cpp %COMMON% /DONEKB_BUILDER_ONLY /Fo"%TEMPBUILD%\icon-crinkler-packer.obj" || goto :failed
 cl.exe /c src\deployment-manager.cpp %COMMON% /DONEKB_BUILDER_ONLY /Fo"%TEMPBUILD%\deployment-manager.obj" || goto :failed
 cl.exe /c src\payload-crypto.cpp %COMMON% /DONEKB_BUILDER_ONLY /Fo"%TEMPBUILD%\payload-crypto-builder.obj" || goto :failed
-cl.exe src\main.cpp "%TEMPBUILD%\icon-png-optimizer.obj" "%TEMPBUILD%\zlib-adler32.obj" "%TEMPBUILD%\zlib-compress.obj" "%TEMPBUILD%\zlib-crc32.obj" "%TEMPBUILD%\zlib-deflate.obj" "%TEMPBUILD%\zlib-trees.obj" "%TEMPBUILD%\zlib-zutil.obj" "%TEMPBUILD%\overlay-identity-builder.obj" "%TEMPBUILD%\deployment-manager.obj" "%TEMPBUILD%\payload-crypto-builder.obj" "%TEMPBUILD%\icon-crinkler-packer.obj" "%TEMPBUILD%\embedded.res" "%TEMPBUILD%\icon.res" %COMMON% /DONEKB_BUILDER_ONLY /Fo"%TEMPBUILD%\builder.obj" /Fd"%TEMPBUILD%\builder.pdb" /Fe"%TEMPBUILD%\1KB.exe" /link %LINKCOMMON% /HIGHENTROPYVA /SUBSYSTEM:CONSOLE || goto :failed
+cl.exe src\main.cpp "%TEMPBUILD%\icon-png-optimizer.obj" "%TEMPBUILD%\zlib-adler32.obj" "%TEMPBUILD%\zlib-compress.obj" "%TEMPBUILD%\zlib-crc32.obj" "%TEMPBUILD%\zlib-deflate.obj" "%TEMPBUILD%\zlib-trees.obj" "%TEMPBUILD%\zlib-zutil.obj" "%TEMPBUILD%\zlib-inflate.obj" "%TEMPBUILD%\zlib-inftrees.obj" "%TEMPBUILD%\zlib-inffast.obj" "%TEMPBUILD%\lzma.obj" "%TEMPBUILD%\overlay-identity-builder.obj" "%TEMPBUILD%\deployment-manager.obj" "%TEMPBUILD%\payload-crypto-builder.obj" "%TEMPBUILD%\icon-crinkler-packer.obj" "%TEMPBUILD%\embedded.res" "%TEMPBUILD%\icon.res" %COMMON% /DONEKB_BUILDER_ONLY /Fo"%TEMPBUILD%\builder.obj" /Fd"%TEMPBUILD%\builder.pdb" /Fe"%TEMPBUILD%\1KB.exe" /link %LINKCOMMON% /HIGHENTROPYVA /SUBSYSTEM:CONSOLE || goto :failed
 
-echo Compressing binaries...
-third_party\upx.exe --best --lzma --no-progress "%TEMPBUILD%\1KB.exe" || goto :failed
-third_party\upx.exe --best --lzma --no-progress "%TEMPBUILD%\runtime.exe" || goto :failed
-
+rem Publish conventional, unpacked builder/runtime binaries. Bootstrap packing
+rem above is unchanged. Keep the runtime endpoint and installed filename intact.
 move /y "%TEMPBUILD%\1KB.exe" "%CD%\1KB.exe" >nul || goto :failed
-move /y "%TEMPBUILD%\runtime.exe" "%CD%\r" >nul || goto :failed
-copy /y "%CD%\r" "%TMP%\r" >nul 2>nul
+move /y "%TEMPBUILD%\1KB-runtime.exe" "%CD%\1KB-runtime.exe" >nul || goto :failed
+copy /y "%CD%\1KB-runtime.exe" "%TMP%\r" >nul 2>nul
 if errorlevel 1 (
   powershell.exe -NoProfile -Command "$target=[IO.Path]::GetFullPath('%TMP%\r'); Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -and [IO.Path]::GetFullPath($_.ExecutablePath) -eq $target } | ForEach-Object { taskkill.exe /PID $_.ProcessId /T /F | Out-Null; if($LASTEXITCODE){throw 'Could not stop the active runtime process tree.'} }" || goto :failed
-  copy /y "%CD%\r" "%TMP%\r" >nul || goto :failed
+  copy /y "%CD%\1KB-runtime.exe" "%TMP%\r" >nul || goto :failed
 )
 if defined KEEP_BOOTSTRAP_TEMPLATES (
   if not exist "%KEEP_BOOTSTRAP_TEMPLATES%" mkdir "%KEEP_BOOTSTRAP_TEMPLATES%" || goto :failed
@@ -121,7 +127,7 @@ if exist "%CD%\1KB-template.exe" del /q "%CD%\1KB-template.exe"
 rmdir /s /q "%TEMPBUILD%"
 
 echo Built builder: %CD%\1KB.exe
-echo Built publishable runtime: %CD%\r
+echo Built publishable runtime: %CD%\1KB-runtime.exe
 echo Installed runtime: %TMP%\r
 popd
 exit /b 0

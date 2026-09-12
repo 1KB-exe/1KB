@@ -1,0 +1,38 @@
+#include <windows.h>
+
+// Product release version, independent of the on-disk protocol versions.
+#define ONEKB_RUNTIME_VERSION 0,0,1,0
+#define ONEKB_RUNTIME_VERSION_TEXT "0.0.1"
+
+LANGUAGE LANG_ENGLISH, SUBLANG_ENGLISH_US
+
+1 ICON "1KB-logo.ico"
+
+1 VERSIONINFO
+ FILEVERSION ONEKB_RUNTIME_VERSION
+ PRODUCTVERSION ONEKB_RUNTIME_VERSION
+ FILEFLAGSMASK VS_FFI_FILEFLAGSMASK
+ FILEFLAGS VS_FF_PRERELEASE
+ FILEOS VOS_NT_WINDOWS32
+ FILETYPE VFT_APP
+ FILESUBTYPE 0
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "040904B0"
+        BEGIN
+            VALUE "CompanyName", "1KB.exe project"
+            VALUE "FileDescription", "1KB.exe app launcher runtime"
+            VALUE "FileVersion", ONEKB_RUNTIME_VERSION_TEXT
+            VALUE "InternalName", "1KB-runtime"
+            VALUE "OriginalFilename", "1KB-runtime.exe"
+            VALUE "ProductName", "1KB.exe"
+            VALUE "ProductVersion", ONEKB_RUNTIME_VERSION_TEXT
+            VALUE "Comments", "Downloads, installs, and updates applications launched with 1KB.exe."
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x0409, 1200
+    END
+END

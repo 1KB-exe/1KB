@@ -13,5 +13,6 @@ constexpr DWORD GracefulRestartTimeoutMs = 5000;
 constexpr DWORD ForcedRestartTimeoutMs = 2000;
 constexpr unsigned long long MaxUpdateConfigurationSize = 4ull * 1024ull;
 constexpr unsigned long long MaxAppIdBytes = 4ull * 1024ull;
-constexpr unsigned long long MaxApplicationSize = 100ull * 1024ull * 1024ull;
+// This bounds launcher/template inspection only, not application packages.
+constexpr unsigned long long MaxLauncherSize = 16ull * 1024ull * 1024ull;
 }
