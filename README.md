@@ -17,7 +17,7 @@ Turn your app into a self-updating 1KB.exe
 ### Fun Facts
 - This README.md is larger than 1KB.exe
 - Hello World in C is ~10KB when optimized for smallest size
-- 1KB.exe's self-updating launcher is smaller than a local shortcut .lnk to your program
+- 1KB.exe is smaller than a local shortcut .lnk to your program
 - The HTTP headers sent to request a 1KB.exe download are bigger than the file itself
 - 1KB.exe's code signature is many times larger than the program it signs
 - 1KB.exe's build script is larger than the program it builds
@@ -25,9 +25,10 @@ Turn your app into a self-updating 1KB.exe
 - A conventional .exe exceeds 1KB even with just one byte of code and one byte of icon data, due to 512 byte alignment and padding
 - A 1.44MB floppy can store a maximum of 2,692 files. 1KB.exe fits in its 512 sector size, allowing 2,692 seperate program launchers to fit on 1 floppy
 - Two complete 1KB.exe launchers is still less than 1 KB
-- 1KB.exe is 402 bytes (iconless), easily fitting into a QR code
+- 1KB.exe is 400 bytes (iconless), easily fitting into a QR code
 
 <div align="center">
-<img width="425" height="425" alt="image" src="https://github.com/user-attachments/assets/c0db8520-1e3f-4f0c-82db-84333f975c17" />
+<img width="340" height="340" alt="image" src="https://github.com/user-attachments/assets/17a3deef-c9dc-4f69-a656-ee67bbd507d2" />
+
 
 
